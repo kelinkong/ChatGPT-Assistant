@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Alert, Platform } from 'react-native';
 import { OpenAI } from 'openai';
+import { Groq } from 'groq-sdk';
 import { useApiKeyContext } from '../contexts/apiKeyContext';
 
 
@@ -25,11 +26,23 @@ export const useApi = () => {
     // Retrieve API key from useApiKey hook
     const { apiKey } = useApiKeyContext();
 
+    // Create the appropriate client based on the API type
+    const createApiClient = () => {
+        switch (apiKey.type) {
+            case 'OpenAI':
+                return new OpenAI({ apiKey: apiKey.key, dangerouslyAllowBrowser: true });
+            case 'GroqCloud':
+                return new Groq({ apiKey: apiKey.key, dangerouslyAllowBrowser: true });
+            default:
+                throw new Error('Unsupported API type');
+        }
+    };
+
     // Function to get a completion from OpenAI
     const getCompletion = async (prompt: string) => {
 
         // Check if API key is not found
-        if (!apiKey) {
+        if (!apiKey.key) {
             const errorMessage = 'No API key found';
             if (Platform.OS === 'web') {
                 window.alert(errorMessage);
@@ -50,18 +63,30 @@ export const useApi = () => {
         setMessages(chatHistory);
 
         try {
-            // Create OpenAI instance and request a chat completion
-            // (For different models: https://platform.openai.com/docs/models)
-            // Using `dangerouslyAllowBrowser: true` option only for web environments
-            // to enable API key usage in the browser.
-            const openai = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
-            const completion = await openai.chat.completions.create({
-                model: 'gpt-3.5-turbo',
-                messages: chatHistory,
-            });
+            let aiResponse: string;
+            
+            switch (apiKey.type) {
+                case 'OpenAI':
+                    const openai = createApiClient() as OpenAI;
+                    const completion = await openai.chat.completions.create({
+                        model: 'gpt-3.5-turbo',
+                        messages: chatHistory,
+                    });
+                    aiResponse = completion.choices[0].message.content?.trim() || 'An error occurred';
+                    break;
 
-            // Extract the AI's response text
-            const aiResponse = completion.choices[0].message.content?.trim() || 'An error occurred';
+                case 'GroqCloud':
+                    const groq = createApiClient() as Groq;
+                    const groqCompletion = await groq.chat.completions.create({
+                        model: 'mixtral-8x7b-32768',  
+                        messages: chatHistory,
+                    });
+                    aiResponse = groqCompletion.choices[0].message.content?.trim() || 'An error occurred';
+                    break;
+
+                default:
+                    throw new Error('Unsupported API type');
+            }
 
             // Create a new AI message with the AI's response
             const aiMessage: Message = {
@@ -91,7 +116,7 @@ export const useApi = () => {
     const generateImage = async (prompt: string) => {
 
         // Check if API key is not found
-        if (!apiKey) {
+        if (!apiKey.key) {
             const errorMessage = 'No API key found';
             if (Platform.OS === 'web') {
                 window.alert(errorMessage);
@@ -116,7 +141,7 @@ export const useApi = () => {
             // (For a different model: https://platform.openai.com/docs/models)
             // Using `dangerouslyAllowBrowser: true` option only for web environments
             // to enable API key usage in the browser.
-            const openai = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
+            const openai = new OpenAI({ apiKey: apiKey.key, dangerouslyAllowBrowser: true });
             const response = await openai.images.generate({
                 model: 'dall-e-3',
                 prompt,
@@ -154,7 +179,7 @@ export const useApi = () => {
     const speechToText = async (audioUri: string) => {
 
         // Check if API key is not found
-        if (!apiKey) {
+        if (!apiKey.key) {
             const errorMessage = 'No API key found';
             if (Platform.OS === 'web') {
                 window.alert(errorMessage);
@@ -181,7 +206,7 @@ export const useApi = () => {
             const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${apiKey}`,
+                    'Authorization': `Bearer ${apiKey.key}`,
                     'Content-Type': 'multipart/form-data',
                 },
                 body: formData,

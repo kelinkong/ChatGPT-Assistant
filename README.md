@@ -30,9 +30,13 @@ npm install
 3. Start the development server:
 
 ```
-expo start
+expo start # Disabled
 ```
 
+```
+npm uninstall -g expo-cli  # Remove global expo-cli
+npx expo start # Start local server
+```
 
 4. Follow the instructions to run the application on your desired platform (Android, iOS, or web).
 
